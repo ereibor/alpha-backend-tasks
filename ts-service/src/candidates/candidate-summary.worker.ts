@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { RabbitSubscribe } from "@golevelup/nestjs-rabbitmq";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 
@@ -10,7 +11,7 @@ import {
   SUMMARIZATION_PROVIDER,
   SummarizationProvider,
 } from "../llm/summarization-provider.interface";
-import { EnqueuedJob, QueueService } from "../queue/queue.service";
+import { Inject } from "@nestjs/common";
 
 interface SummaryJobPayload {
   summaryId: string;
@@ -21,10 +22,8 @@ interface SummaryJobPayload {
 @Injectable()
 export class CandidateSummaryWorker {
   private readonly logger = new Logger(CandidateSummaryWorker.name);
-  private readonly processedJobIds = new Set<string>();
 
   constructor(
-    private readonly queueService: QueueService,
     @InjectRepository(CandidateSummary)
     private readonly summaryRepository: Repository<CandidateSummary>,
     @InjectRepository(CandidateDocument)
@@ -33,32 +32,15 @@ export class CandidateSummaryWorker {
     private readonly summarizationProvider: SummarizationProvider,
   ) {}
 
-  async processQueuedJobs(): Promise<void> {
-    const jobs = this.queueService.getQueuedJobs();
+  @RabbitSubscribe({
+    exchange: "candidate_summaries",
+    routingKey: "summary.generate",
+    queue: "summary_queue",
+  })
+  async handleSummaryJob(payload: SummaryJobPayload): Promise<void> {
+    this.logger.log(`Processing summary job for ${payload.summaryId}`);
 
-    for (const job of jobs) {
-      if (job.name !== "candidate.summary.generate") {
-        continue;
-      }
-
-      if (this.processedJobIds.has(job.id)) {
-        continue;
-      }
-
-      this.processedJobIds.add(job.id);
-
-      await this.handleSummaryJob(job as EnqueuedJob<SummaryJobPayload>).catch(
-        (error) => {
-          this.logger.error(`Failed to handle job ${job.id}`, error as Error);
-        },
-      );
-    }
-  }
-
-  private async handleSummaryJob(
-    job: EnqueuedJob<SummaryJobPayload>,
-  ): Promise<void> {
-    const { summaryId, candidateId, workspaceId } = job.payload;
+    const { summaryId, candidateId, workspaceId } = payload;
 
     const summary = await this.summaryRepository.findOne({
       where: { id: summaryId, candidateId, workspaceId },

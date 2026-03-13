@@ -7,7 +7,8 @@ A NestJS + TypeScript service for candidate document intake and AI-powered summa
 ## Prerequisites
 
 - Node.js 20+
-- Docker (for PostgreSQL)
+- PostgreSQL (via Docker or local installation)
+- RabbitMQ (via Docker or local installation)
 - A Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
 
 ---
@@ -30,15 +31,22 @@ PORT=3000
 DATABASE_URL=postgres://assessment_user:assessment_pass@localhost:5432/assessment_db
 NODE_ENV=development
 GEMINI_API_KEY=your_gemini_api_key_here
+RABBITMQ_URL=amqp://guest:guest@localhost:5672
 ```
 
-### 3. Start the database
+### 3. Start the database and RabbitMQ
+
+**Option A — Using Docker:**
 
 From the repo root:
 
 ```bash
 docker compose up -d
 ```
+
+**Option B — Local installations:**
+
+If you have PostgreSQL and RabbitMQ installed locally, they will start automatically as background services. No extra steps needed.
 
 ### 4. Run migrations
 
@@ -126,8 +134,21 @@ POST /candidates/:candidateId/documents
 POST /candidates/:candidateId/summaries/generate
 ```
 
-Returns `202 Accepted` with `{ summaryId, status: "pending", jobId }`.
+Returns `202 Accepted` with `{ summaryId, status: "pending" }`.
 Then poll `GET /candidates/:candidateId/summaries` to see the completed result.
+
+---
+
+## Queue / Worker
+
+Summary generation is handled asynchronously via RabbitMQ:
+
+1. `POST /summaries/generate` creates a `pending` summary record and publishes a job to RabbitMQ
+2. `CandidateSummaryWorker` subscribes to the `summary_queue` and processes jobs in the background
+3. The worker fetches candidate documents, calls Gemini, and updates the summary status to `completed` or `failed`
+4. `GET /summaries` returns the final result
+
+You can monitor queues and messages in real time via the RabbitMQ management dashboard at `http://localhost:15672` (default credentials: `guest` / `guest`).
 
 ---
 
@@ -138,11 +159,11 @@ The service uses **Gemini** (`gemini-2.5-flash`) for summary generation.
 - If `GEMINI_API_KEY` is set and `NODE_ENV` is not `test`, the real Gemini provider is used.
 - If the key is missing or `NODE_ENV=test`, the fake provider is used automatically.
 
-The provider is abstracted behind `SummarizationProvider` interface in `src/llm/summarization-provider.interface.ts`.
+The provider is abstracted behind the `SummarizationProvider` interface in `src/llm/summarization-provider.interface.ts`.
 
 **Limitations:**
 
-- Free tier Gemini keys have daily rate limits. If you hit a 429 error, wait a minute and retry or generate a new key.
+- Free tier Gemini keys have daily rate limits. If you hit a 429 error, wait and retry or generate a new key from a different Google account.
 - Gemini 1.5 models are retired — use `gemini-2.5-flash` or `gemini-2.0-flash`.
 
 ---

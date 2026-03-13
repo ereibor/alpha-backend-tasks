@@ -1,15 +1,16 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
 
-import { AuthUser } from '../auth/auth.types';
-import { EnqueuedJob, QueueService } from '../queue/queue.service';
-import { CandidateDocument } from '../entities/candidate-document.entity';
-import { CandidateSummary } from '../entities/candidate-summary.entity';
-import { SampleCandidate } from '../entities/sample-candidate.entity';
-import { CreateCandidateDocumentDto } from './dto/create-candidate-document.dto';
+import { AuthUser } from "../auth/auth.types";
+import { EnqueuedJob, QueueService } from "../queue/queue.service";
+import { CandidateDocument } from "../entities/candidate-document.entity";
+import { CandidateSummary } from "../entities/candidate-summary.entity";
+import { SampleCandidate } from "../entities/sample-candidate.entity";
+import { CreateCandidateDocumentDto } from "./dto/create-candidate-document.dto";
+import { AmqpConnection } from "@golevelup/nestjs-rabbitmq/lib/amqp/connection";
 
 @Injectable()
 export class CandidatesService {
@@ -20,7 +21,7 @@ export class CandidatesService {
     private readonly documentRepository: Repository<CandidateDocument>,
     @InjectRepository(CandidateSummary)
     private readonly summaryRepository: Repository<CandidateSummary>,
-    private readonly queueService: QueueService,
+    private readonly amqpConnection: AmqpConnection,
   ) {}
 
   async uploadDocument(
@@ -43,12 +44,15 @@ export class CandidatesService {
     return this.documentRepository.save(document);
   }
 
-  async listSummaries(user: AuthUser, candidateId: string): Promise<CandidateSummary[]> {
+  async listSummaries(
+    user: AuthUser,
+    candidateId: string,
+  ): Promise<CandidateSummary[]> {
     const candidate = await this.ensureCandidateInWorkspace(user, candidateId);
 
     return this.summaryRepository.find({
       where: { candidateId: candidate.id, workspaceId: user.workspaceId },
-      order: { createdAt: 'DESC' },
+      order: { createdAt: "DESC" },
     });
   }
 
@@ -64,7 +68,7 @@ export class CandidatesService {
     });
 
     if (!summary) {
-      throw new NotFoundException('Summary not found');
+      throw new NotFoundException("Summary not found");
     }
 
     return summary;
@@ -73,14 +77,14 @@ export class CandidatesService {
   async requestSummaryGeneration(
     user: AuthUser,
     candidateId: string,
-  ): Promise<{ summary: CandidateSummary; job: EnqueuedJob }> {
+  ): Promise<{ summary: CandidateSummary }> {
     const candidate = await this.ensureCandidateInWorkspace(user, candidateId);
 
     const summary = this.summaryRepository.create({
       id: randomUUID(),
       candidateId: candidate.id,
       workspaceId: user.workspaceId,
-      status: 'pending',
+      status: "pending",
       score: null,
       strengths: null,
       concerns: null,
@@ -93,13 +97,18 @@ export class CandidatesService {
 
     const saved = await this.summaryRepository.save(summary);
 
-    const job = this.queueService.enqueue('candidate.summary.generate', {
-      summaryId: saved.id,
-      candidateId: saved.candidateId,
-      workspaceId: saved.workspaceId,
-    });
+    // Publish to RabbitMQ instead of in-memory queue
+    await this.amqpConnection.publish(
+      "candidate_summaries",
+      "summary.generate",
+      {
+        summaryId: saved.id,
+        candidateId: saved.candidateId,
+        workspaceId: saved.workspaceId,
+      },
+    );
 
-    return { summary: saved, job };
+    return { summary: saved };
   }
 
   private async ensureCandidateInWorkspace(
@@ -111,10 +120,9 @@ export class CandidatesService {
     });
 
     if (!candidate) {
-      throw new NotFoundException('Candidate not found in workspace');
+      throw new NotFoundException("Candidate not found in workspace");
     }
 
     return candidate;
   }
 }
-

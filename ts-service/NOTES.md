@@ -1,12 +1,18 @@
-# NOTES — TalentFlow NestJS Service
+# NOTES — NestJS Service
 
 ## Design Decisions
 
 ### Queue / Worker Pattern
 
-The `QueueService` is an in-memory queue. The worker (`CandidateSummaryWorker`) is triggered inline after the generate endpoint enqueues the job, by calling `processQueuedJobs()` within the same request cycle. This keeps the implementation simple and testable without requiring a real message broker like Redis/BullMQ.
+Summary generation is handled asynchronously using RabbitMQ as the message broker. When a recruiter requests a summary, the service creates a `pending` summary record, publishes a job message containing the `summaryId`, `candidateId`, and `workspaceId` to RabbitMQ, and returns `202 Accepted` immediately.
 
-In production, I would replace this with BullMQ or a similar durable queue to decouple the worker from the HTTP request lifecycle and support retries, concurrency, and persistence.
+The `CandidateSummaryWorker` subscribes to the `summary_queue` via the `@RabbitSubscribe` decorator. RabbitMQ automatically delivers messages to the worker as they arrive — no polling required. The worker then fetches the candidate documents from the database, calls Gemini, and updates the summary status to `completed` or `failed`.
+
+This approach ensures:
+
+- The HTTP request returns immediately without waiting for Gemini
+- Jobs are persisted in RabbitMQ and survive server restarts
+- The worker can be scaled independently from the API
 
 ### Summarization Provider Abstraction
 
@@ -44,9 +50,10 @@ The Gemini provider requests JSON output using `responseMimeType: "application/j
 
 ## What I Would Improve With More Time
 
-- **Durable queue**: Replace the in-memory queue with BullMQ + Redis for retry logic, job visibility, and true async processing.
 - **Pagination**: Add cursor or offset pagination to `GET /candidates/:id/summaries`.
 - **jsonb columns**: Use `jsonb` for `strengths` and `concerns` instead of serialised text for better queryability.
 - **E2E tests**: Add supertest-based e2e tests covering the full HTTP layer including auth header validation.
 - **Error codes**: Return structured error responses with machine-readable codes rather than plain messages.
 - **Provider retry logic**: Add exponential backoff for transient Gemini failures (429, 503) rather than immediately marking the summary as failed.
+- **Dead letter queue**: Configure a RabbitMQ dead letter queue to capture failed jobs for inspection and manual retry.
+- **JWT auth**: Replace `FakeAuthGuard` with real JWT verification for production use.
