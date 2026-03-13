@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Briefing Report - {{ company_name }} ({{ ticker }})</title>
+    <style>
+      :root {
+        --bg: #f9fafb;
+        --card-bg: #ffffff;
+        --border: #e5e7eb;
+        --text-main: #111827;
+        --text-muted: #6b7280;
+        --accent: #2563eb;
+        --accent-soft: #eff6ff;
+        --danger: #b91c1c;
+      }
+
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        margin: 0;
+        padding: 2.5rem;
+        background-color: var(--bg);
+        color: var(--text-main);
+      }
+
+      .report {
+        max-width: 900px;
+        margin: 0 auto;
+        background: var(--card-bg);
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05);
+        padding: 2rem 2.5rem 2.25rem;
+      }
+
+      header {
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1.5rem;
+      }
+
+      .title-block h1 {
+        font-size: 1.75rem;
+        margin: 0 0 0.25rem;
+      }
+
+      .title-block p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+
+      .meta {
+        text-align: right;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      .meta .label {
+        font-weight: 500;
+        color: var(--text-main);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background-color: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .section {
+        margin-bottom: 1.5rem;
+      }
+
+      .section:last-of-type {
+        margin-bottom: 0;
+      }
+
+      .section-title {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+
+      .section-title span {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        background: #f3f4f6;
+        font-size: 0.8rem;
+        color: #4b5563;
+      }
+
+      .two-column {
+        display: grid;
+        grid-template-columns: 2fr 1.5fr;
+        gap: 1.5rem;
+      }
+
+      .card {
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        padding: 1rem 1.1rem 1.1rem;
+        background-color: #f9fafb;
+      }
+
+      .list {
+        padding-left: 1.1rem;
+        margin: 0.25rem 0 0;
+      }
+
+      .list li {
+        margin-bottom: 0.25rem;
+      }
+
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+      }
+
+      .metric {
+        border-radius: 0.6rem;
+        border: 1px solid var(--border);
+        padding: 0.6rem 0.75rem;
+        background-color: #f9fafb;
+      }
+
+      .metric-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-bottom: 0.15rem;
+      }
+
+      .metric-value {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .recommendation {
+        border-left: 3px solid var(--accent);
+        padding-left: 0.9rem;
+      }
+
+      .risks-list li::marker {
+        color: var(--danger);
+      }
+
+      footer {
+        margin-top: 1.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 1.25rem;
+        }
+
+        .report {
+          padding: 1.5rem 1.4rem 1.6rem;
+        }
+
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .meta {
+          text-align: left;
+        }
+
+        .two-column {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="report">
+      <header>
+        <div class="title-block">
+          <h1>Company Briefing</h1>
+          <p>
+            {{ company_name }}
+            <span class="pill">{{ ticker }}</span>
+          </p>
+          {% if sector %}
+          <p class="badge">Sector: {{ sector }}</p>
+          {% endif %}
+        </div>
+        <div class="meta">
+          {% if analyst_name %}
+          <div><span class="label">Analyst:</span> {{ analyst_name }}</div>
+          {% endif %}
+          <div><span class="label">Generated:</span> {{ generated_at }}</div>
+        </div>
+      </header>
+
+      <section class="section">
+        <div class="section-title">Executive Summary</div>
+        <p>{{ summary }}</p>
+      </section>
+
+      <section class="section two-column">
+        <div class="card">
+          <div class="section-title">
+            Key Points
+            <span>{{ key_points|length }} items</span>
+          </div>
+          <ul class="list">
+            {% for point in key_points %}
+            <li>{{ point.text }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="section-title">
+            Risks
+            <span>{{ risks|length }} items</span>
+          </div>
+          <ul class="list risks-list">
+            {% for risk in risks %}
+            <li>{{ risk.text }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Recommendation</div>
+        <div class="recommendation">
+          <p>{{ recommendation }}</p>
+        </div>
+      </section>
+
+      {% if metrics and metrics|length > 0 %}
+      <section class="section">
+        <div class="section-title">
+          Metrics
+          <span>{{ metrics|length }} data points</span>
+        </div>
+        <div class="metrics-grid">
+          {% for metric in metrics %}
+          <div class="metric">
+            <div class="metric-label">{{ metric.name }}</div>
+            <div class="metric-value">{{ metric.value }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      <footer>
+        <div>Internal use only. Not for external distribution.</div>
+        <div>InsightOps Briefing Engine</div>
+      </footer>
+    </article>
+  </body>
+</html>
+
